@@ -1,3 +1,13 @@
+// Header OpenMP
+#include<stdio.h>
+#include<stdlib.h>
+#include<omp.h>
+
+// Header C++
+#include <iostream>
+#include <fstream>
+
+// Header Ray tracing
 #include "rtweekend.h"
 
 #include "camera.h"
@@ -5,9 +15,8 @@
 #include "hittable_list.h"
 #include "material.h"
 #include "sphere.h"
+#include "moving_sphere.h"
 
-#include <iostream>
-#include <fstream>
 
 color ray_color(const ray& r, const hittable& world, int depth)
 {
@@ -60,7 +69,12 @@ hittable_list random_scene() {
                     auto albedo = color(val1, val2, val3) * color(val1, val2, val3);
                     // auto albedo = color::random() * color::random();
                     sphere_material = make_shared<lambertian>(albedo);
-                    world.add(make_shared<sphere>(center, 0.2, sphere_material));
+                    auto center2 = center + vec3(0, random_double(0, 0.5), 0);
+                    world.add(make_shared<moving_sphere>(
+                        // center, center2, 0.0, 0.1, 0.2, sphere_material));
+                        center, center2, 0.0, 1.0, 0.2, sphere_material));
+                    // world.add(make_shared<sphere>(
+                    //     center,  0.2, sphere_material));
                 }
                 else if ( choose_mat < 0.95) 
                 {
@@ -105,11 +119,12 @@ int main() {
 
     //>--- Image parameters
 
-    const auto aspect_ratio = 16.0 / 9.0;
-    const int image_width = 100;
+    const auto aspect_ratio = 4.0 / 3.0;
+    // const auto aspect_ratio = 16.0 / 9.0;
+    const int image_width = 200;
     const int image_height = static_cast<int>(image_width / aspect_ratio);
-    const int samples_per_pixel = 10;
-    const int max_depth = 5;
+    const int samples_per_pixel = 50;
+    const int max_depth = 50;
 
     //> --- World
 
@@ -123,7 +138,8 @@ int main() {
     auto dist_to_focus = 10.0;
     auto aperture = 0.1;
 
-    camera cam(lookfrom, lookat, vup, 20, aspect_ratio, aperture, dist_to_focus);
+    // camera cam(lookfrom, lookat, vup, 20, aspect_ratio, aperture, dist_to_focus);
+    camera cam(lookfrom, lookat, vup, 20, aspect_ratio, aperture, dist_to_focus, 0.0, 1.0);
 
 
     //> --- Render
@@ -134,9 +150,31 @@ int main() {
     std::cout << "P3\n" << image_width << ' ' << image_height << ' ' << "\n255\n";
 
     // Draw image pixels from top to bottom, left to right
-    for (int j = image_height-1; j >= 0; j--) {
-        std::cerr << "\rRemaning rows : " << j+1 << "/" << image_height  << ' ' << std::flush;
-        // std::cerr << "\rScanlines remaining: " << j << ' ' << std::flush;
+
+    //For OpenMP parallelization
+    int array_ir[image_width][image_height], array_ig[image_width][image_height] , array_ib[image_width][image_height];
+    int ir, ig, ib;
+
+    // int n;
+    // #pragma omp parallel for
+    // for(n=0;n<8;n++){
+    //     printf("Element %d traité par le thread %d \n",n,omp_get_thread_num());
+    // }
+    
+    // #pragma omp parallel for
+    std::cerr << "Number of threads set for OpenMP wich can be used" << omp_get_max_threads() << std::endl;
+    int j;
+    int k = 0;
+    #pragma omp parallel for num_threads(4) private(ir, ig, ib) shared(j,array_ir, array_ig, array_ib)
+    for (j = image_height-1; j >= 0; j--) {
+    // for (int j = image_height-1; j >= 0; j--) {
+        #pragma omp critical
+        {
+            std::cerr << "\rNumber of row treated : " << k << "/" << image_height  << " thread " << omp_get_thread_num() << std::flush;
+        }
+        // std::cerr << "\rRemaning rows : " << j+1 << "/" << image_height  << " thread " << omp_get_thread_num() << std::endl;
+        // std::cerr << "\rRemaning rows : " << j+1 << "/" << image_height  << ' ' << std::flush;
+        // std::cerr << "\rScanlines remaining: " << j << ' ' << std::endl;
         for (int i = 0; i < image_width; ++i) {
             color pixel_color(0, 0, 0);
             for (int s = 0; s < samples_per_pixel; s++)
@@ -147,10 +185,23 @@ int main() {
                 ray r = cam.get_ray(u, v);
                 pixel_color += ray_color(r, world, max_depth);
             }
-            write_color(std::cout, pixel_color, samples_per_pixel);
+            write_color(ir, ig, ib, pixel_color, samples_per_pixel);
+            array_ir[i][j] = ir;
+            array_ig[i][j] = ig;
+            array_ib[i][j] = ib;
+            // write_color(std::cout, pixel_color, samples_per_pixel);
         }
+        k++;
     }
 
+    std::cerr << std::endl;
+    std::cerr << "Writing file..." << std::endl;
+    for (int j = image_height-1; j >= 0; j--) {
+        for (int i = 0; i < image_width; i++)
+        {
+            std::cout << array_ir[i][j] << ' ' << array_ig[i][j] << ' ' << array_ib[i][j] <<  '\n';
+        }
+    }
     std::cerr << "Done." <<  std::endl;
 
     //> --- Restoring cout flux
