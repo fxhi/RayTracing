@@ -11,11 +11,13 @@
 #include "rtweekend.h"
 
 #include "camera.h"
+#include "bvh.h"
 #include "color.h"
-#include "hittable_list.h"
+// #include "hittable_list.h"
 #include "material.h"
 #include "sphere.h"
 #include "moving_sphere.h"
+
 
 
 color ray_color(const ray& r, const hittable& world, int depth)
@@ -42,6 +44,8 @@ color ray_color(const ray& r, const hittable& world, int depth)
 
 hittable_list random_scene() {
     hittable_list world;
+
+    hittable_list objects;
 
     auto ground_material = make_shared<lambertian>(color(0.5, 0.5, 0.5));
     world.add(make_shared<sphere>(point3(0,-1000,0), 1000, ground_material));
@@ -104,7 +108,10 @@ hittable_list random_scene() {
     auto material3 = make_shared<metal>(color(0.7, 0.6, 0.5), 0.5);
     world.add(make_shared<sphere>(point3(4, 1, 0), 1.0, material3));
 
-    return world;
+    objects.add(make_shared<bvh_node>(world, 0, 1));
+
+    return objects;
+    // return world;
 }
 
 
@@ -119,12 +126,12 @@ int main() {
 
     //>--- Image parameters
 
-    const auto aspect_ratio = 4.0 / 3.0;
-    // const auto aspect_ratio = 16.0 / 9.0;
-    const int image_width = 200;
+    // const auto aspect_ratio = 4.0 / 3.0;
+    const auto aspect_ratio = 16.0 / 9.0;
+    const int image_width = 400;
     const int image_height = static_cast<int>(image_width / aspect_ratio);
     const int samples_per_pixel = 50;
-    const int max_depth = 50;
+    const int max_depth = 8;
 
     //> --- World
 
